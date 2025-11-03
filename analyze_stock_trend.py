@@ -207,6 +207,60 @@ def analyze_stock_trend(stock_name_or_code, period_days=365):
             print(f"  평가:            [하락] 하락 모멘텀")
         else:
             print(f"  평가:            [급락] 강한 하락 모멘텀")
+        print()
+
+        # 거래량 분석
+        avg_volume = df['거래량'].mean()
+        current_volume = df['거래량'].iloc[-1]
+        recent_avg_volume = df['거래량'].tail(20).mean()
+        volume_surge_days = (df['거래량'] > avg_volume * 2).sum()
+
+        print(f"[거래] 거래량 분석")
+        print(f"{'─'*60}")
+        print(f"  평균 거래량:     {avg_volume:>12,.0f}주")
+        print(f"  최근 거래량:     {current_volume:>12,.0f}주", end=" ")
+
+        volume_ratio = (current_volume / avg_volume - 1) * 100
+        if volume_ratio > 100:
+            print(f"(평균 대비 +{volume_ratio:.1f}%, 급증)")
+        elif volume_ratio > 50:
+            print(f"(평균 대비 +{volume_ratio:.1f}%, 증가)")
+        elif volume_ratio > -50:
+            print(f"(평균 대비 {volume_ratio:+.1f}%, 보통)")
+        else:
+            print(f"(평균 대비 {volume_ratio:+.1f}%, 감소)")
+
+        print(f"  20일 평균 거래량: {recent_avg_volume:>12,.0f}주", end=" ")
+        recent_volume_ratio = (recent_avg_volume / avg_volume - 1) * 100
+        if recent_volume_ratio > 50:
+            print(f"(전체 대비 +{recent_volume_ratio:.1f}%, 활발)")
+        elif recent_volume_ratio > 0:
+            print(f"(전체 대비 +{recent_volume_ratio:.1f}%, 증가)")
+        else:
+            print(f"(전체 대비 {recent_volume_ratio:+.1f}%, 감소)")
+
+        print(f"  거래량 급증 일수: {volume_surge_days:>4}일 (평균 대비 2배 이상)")
+
+        # 가격-거래량 상관관계
+        price_change = df['종가'].pct_change()
+        volume_change = df['거래량'].pct_change()
+        price_volume_corr = price_change.corr(volume_change)
+
+        print(f"  가격-거래량 상관: {price_volume_corr:>8.3f}", end=" ")
+        if abs(price_volume_corr) < 0.1:
+            print("(무상관)")
+        elif price_volume_corr > 0.3:
+            print("(정상관, 거래량 증가 시 상승)")
+        elif price_volume_corr > 0:
+            print("(약한 정상관)")
+        elif price_volume_corr > -0.3:
+            print("(약한 부상관)")
+        else:
+            print("(부상관, 거래량 증가 시 하락)")
+
+        # 거래대금 분석 (최근 20일)
+        recent_trading_value = (df['종가'] * df['거래량']).tail(20).sum() / 100_000_000
+        print(f"  최근 20일 거래대금: {recent_trading_value:>10,.0f}억원")
 
         print(f"\n{'='*60}\n")
 
@@ -225,7 +279,13 @@ def analyze_stock_trend(stock_name_or_code, period_days=365):
             'r_squared': r_squared,
             'is_uptrend': is_uptrend,
             'volatility': volatility,
-            'recent_return': recent_return
+            'recent_return': recent_return,
+            'avg_volume': avg_volume,
+            'current_volume': current_volume,
+            'recent_avg_volume': recent_avg_volume,
+            'volume_surge_days': volume_surge_days,
+            'price_volume_corr': price_volume_corr,
+            'recent_trading_value': recent_trading_value
         }
 
         return result
