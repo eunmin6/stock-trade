@@ -149,9 +149,11 @@ def analyze_tradings(df):
     print(f"총 거래 건수: {len(df)}건")
     print("=" * 80)
 
-    # 거래 타입별 통계
-    print("\n[거래 타입별 분류]")
+    # 거래 타입별 통계 (매수만 제외)
+    print("\n[거래 타입별 수익 현황]")
     for trade_type in df['거래타입'].unique():
+        if trade_type == '매수만':
+            continue
         count = len(df[df['거래타입'] == trade_type])
         profit = df[df['거래타입'] == trade_type]['손익금액'].sum()
         print(f"{trade_type:20s}: {count:2d}건 | 손익: {profit:>12,.0f}원")
@@ -380,9 +382,11 @@ def generate_markdown_report(df, summary, date_str=None):
     if date_str is None:
         date_str = datetime.now().strftime('%Y-%m-%d')
 
-    # 거래 타입별 통계
+    # 거래 타입별 통계 (매수만 제외)
     trade_type_stats = ""
     for trade_type in df['거래타입'].unique():
+        if trade_type == '매수만':
+            continue
         count = len(df[df['거래타입'] == trade_type])
         profit = df[df['거래타입'] == trade_type]['손익금액'].sum()
         trade_type_stats += f"| {trade_type} | {count}건 | {profit:,.0f}원 |\n"
@@ -406,7 +410,7 @@ def generate_markdown_report(df, summary, date_str=None):
 
 ---
 
-## 🔄 거래 타입별 분류
+## 🔄 거래 타입별 수익 현황
 
 | 거래 타입 | 건수 | 손익금액 |
 |-----------|------|----------|
