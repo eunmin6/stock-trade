@@ -98,9 +98,9 @@ def classify_trade_type(row):
     sell_qty = row['금일매도_수량'] if pd.notna(row['금일매도_수량']) else 0
 
     if buy_qty == sell_qty and buy_qty > 0:
-        return '당일매수_당일매도'  # 데이트레이딩
+        return '데이트레이딩'  # 당일 매수 당일 매도
     elif buy_qty < sell_qty:
-        return '이전보유분_매도'  # 이전에 매수한 것을 오늘 매도
+        return '스윙투자'  # 이전에 매수한 것을 오늘 매도
     elif buy_qty > sell_qty and sell_qty > 0:
         return '일부매도'
     elif buy_qty > 0 and sell_qty == 0:
