@@ -6,6 +6,7 @@ from datetime import datetime
 import matplotlib.font_manager as fm
 import os
 import sys
+from pykrx import stock
 
 # 한글 폰트 설정
 def setup_korean_font():
@@ -91,6 +92,36 @@ def load_tradings(date_str=None):
     df['거래타입'] = df.apply(classify_trade_type, axis=1)
 
     return df
+
+def get_market_data(stock_code, date_str):
+    """종목의 시총과 거래대금을 가져옵니다."""
+    try:
+        # 종목코드 6자리로 변환
+        stock_code_str = str(int(stock_code)).zfill(6)
+
+        # 날짜 형식 변환 (YYYY-MM-DD -> YYYYMMDD)
+        date_formatted = date_str.replace('-', '')
+
+        # 시가총액 조회 (첫 번째 컬럼이 시가총액)
+        market_cap = stock.get_market_cap_by_date(date_formatted, date_formatted, stock_code_str)
+        if not market_cap.empty:
+            cap_value = market_cap.iloc[0, 0] / 100000000  # 억원 단위로 변환
+        else:
+            cap_value = 0
+
+        # 거래대금 조회 (OHLCV 데이터의 거래대금 컬럼)
+        ohlcv = stock.get_market_ohlcv_by_date(date_formatted, date_formatted, stock_code_str)
+        if not ohlcv.empty:
+            # 거래대금은 6번째 컬럼 (시가, 고가, 저가, 종가, 거래량, 거래대금)
+            trading_value = ohlcv.iloc[0, 4] * ohlcv.iloc[0, 3] / 100000000  # 거래량 * 종가 / 억원 단위
+        else:
+            trading_value = 0
+
+        return cap_value, trading_value
+    except Exception as e:
+        # 에러 발생 시 0 반환 (디버깅용 출력 제거)
+        # print(f"  [Warning] {stock_code_str} 데이터 조회 실패: {str(e)}")
+        return 0, 0
 
 def classify_trade_type(row):
     """거래 유형을 분류합니다."""
@@ -429,8 +460,8 @@ def generate_markdown_report(df, summary, date_str=None):
 
 ## 💰 거래별 손익 상세
 
-| 순위 | 종목명 | 거래타입 | 매입금액 | 매도금액 | 손익금액 | 수익률 |
-|------|--------|----------|----------|----------|----------|--------|
+| 순위 | 종목명 | 거래타입 | 시총(억) | 거래대금(억) | 매입금액 | 매도금액 | 손익금액 | 수익률 |
+|------|--------|----------|----------|----------|----------|----------|----------|--------|
 """
 
     df_sorted = df.sort_values('손익금액', ascending=True).reset_index(drop=True)
@@ -439,12 +470,18 @@ def generate_markdown_report(df, summary, date_str=None):
         rank = idx + 1
         stock_name = row['종목명']
         trade_type = row['거래타입']
+
+        # 시총과 거래대금 가져오기
+        market_cap, trading_value = get_market_data(row['종목코드'], date_str)
+        market_cap_str = f"{market_cap:,.0f}" if market_cap > 0 else "N/A"
+        trading_value_str = f"{trading_value:,.0f}" if trading_value > 0 else "N/A"
+
         buy_amount = f"{row['금일매수_매입금액']:,.0f}원"
         sell_amount = f"{row['금일매도_매도금액']:,.0f}원"
         profit = f"{row['손익금액']:,.0f}원"
         return_rate = f"{row['수익률']*100:+.2f}%"
 
-        md_content += f"| {rank} | {stock_name} | {trade_type} | {buy_amount} | {sell_amount} | {profit} | {return_rate} |\n"
+        md_content += f"| {rank} | {stock_name} | {trade_type} | {market_cap_str} | {trading_value_str} | {buy_amount} | {sell_amount} | {profit} | {return_rate} |\n"
 
     # 수익률 분석
     md_content += "\n---\n\n## 📊 수익률 분석\n\n"

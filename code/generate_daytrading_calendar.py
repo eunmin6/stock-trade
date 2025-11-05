@@ -165,16 +165,19 @@ def load_daily_trades(date_str):
                     if line.startswith('##') or line.startswith('---'):
                         break
 
-                    # 데이터 행 파싱 (| 1 | 종목명 | 데이트레이딩 | ... |)
+                    # 데이터 행 파싱 (| 1 | 종목명 | 데이트레이딩 | 시총 | 거래대금 | ... |)
                     if line.startswith('|') and '데이트레이딩' in line:
                         parts = [p.strip() for p in line.split('|')]
-                        if len(parts) >= 7:
+                        # 시총/거래대금 추가로 인해 컬럼이 9개로 증가
+                        if len(parts) >= 10:
                             try:
                                 rank = parts[1]
                                 stock = parts[2]
                                 trade_type = parts[3]
-                                profit_str = parts[6].replace('원', '').replace(',', '').strip()
-                                return_str = parts[7].replace('%', '').strip()
+                                market_cap = parts[4]  # 시총
+                                trading_value = parts[5]  # 거래대금
+                                profit_str = parts[8].replace('원', '').replace(',', '').strip()
+                                return_str = parts[9].replace('%', '').strip()
 
                                 profit = int(profit_str)
                                 return_rate = float(return_str)
@@ -182,6 +185,8 @@ def load_daily_trades(date_str):
                                 trades.append({
                                     'rank': rank,
                                     'stock': stock,
+                                    'market_cap': market_cap,
+                                    'trading_value': trading_value,
                                     'profit': profit,
                                     'return_rate': return_rate
                                 })
@@ -226,11 +231,13 @@ def generate_daily_details(year, month, trading_results):
         # 거래 테이블 생성
         trade_table = ""
         if daily_trades:
-            trade_table = "\n| 순위 | 종목명 | 손익금액 | 수익률 |\n"
-            trade_table += "|:----:|--------|----------:|--------:|\n"
+            trade_table = "\n| 순위 | 종목명 | 시총(억) | 거래대금(억) | 손익금액 | 수익률 |\n"
+            trade_table += "|:----:|--------|----------:|----------:|----------:|--------:|\n"
 
             for trade in daily_trades:
                 stock = trade['stock']
+                market_cap = trade.get('market_cap', 'N/A')
+                trading_value = trade.get('trading_value', 'N/A')
                 trade_profit = trade['profit']
                 return_rate = trade['return_rate']
 
@@ -254,7 +261,7 @@ def generate_daily_details(year, month, trading_results):
                 return_sign = '+' if return_rate > 0 else ''
                 return_display = f"{color_start}{return_sign}{return_rate:.2f}%{color_end}"
 
-                trade_table += f"| {trade['rank']} | {stock} | {profit_display} | {return_display} |\n"
+                trade_table += f"| {trade['rank']} | {stock} | {market_cap} | {trading_value} | {profit_display} | {return_display} |\n"
 
         detail = f"""#### {date_str} ({weekday_kr}) {emoji}
 - 거래 건수: {count}건
