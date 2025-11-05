@@ -131,16 +131,12 @@ def analyze_tradings(df):
     total_buy_amount = df['매입금액'].sum()
     total_sell_amount = df['매도금액'].sum()
     total_profit = df['손익금액'].sum()
-    total_fee = df['수수료및세금'].sum()
     total_return = (total_profit / total_buy_amount) * 100 if total_buy_amount > 0 else 0
-    net_profit = total_profit - total_fee
 
     print("\n[전체 거래 현황]")
     print(f"총 매입금액: {total_buy_amount:,.0f}원")
     print(f"총 매도금액: {total_sell_amount:,.0f}원")
     print(f"총 손익금액: {total_profit:,.0f}원")
-    print(f"수수료/세금: {total_fee:,.0f}원")
-    print(f"순손익금액: {net_profit:,.0f}원")
     print(f"평균 수익률: {total_return:.2f}%")
 
     # 수익/손실 거래 분류
@@ -193,8 +189,6 @@ def analyze_tradings(df):
         'total_buy_amount': total_buy_amount,
         'total_sell_amount': total_sell_amount,
         'total_profit': total_profit,
-        'total_fee': total_fee,
-        'net_profit': net_profit,
         'total_return': total_return,
         'profit_trades': len(profit_trades),
         'loss_trades': len(loss_trades)
@@ -282,8 +276,6 @@ def visualize_tradings(df, summary, date_str=None):
     총 매입금액: {summary['total_buy_amount']:,.0f}원
     총 매도금액: {summary['total_sell_amount']:,.0f}원
     총 손익금액: {summary['total_profit']:,.0f}원
-    수수료/세금: {summary['total_fee']:,.0f}원
-    순손익금액: {summary['net_profit']:,.0f}원
     평균 수익률: {summary['total_return']:.2f}%
 
     수익 거래: {summary['profit_trades']}건
@@ -366,8 +358,6 @@ def generate_markdown_report(df, summary, date_str=None):
 | 총 매입금액 | {summary['total_buy_amount']:,.0f}원 |
 | 총 매도금액 | {summary['total_sell_amount']:,.0f}원 |
 | 총 손익금액 | {summary['total_profit']:,.0f}원 |
-| 수수료/세금 | {summary['total_fee']:,.0f}원 |
-| 순손익금액 | {summary['net_profit']:,.0f}원 |
 | 평균 수익률 | {summary['total_return']:.2f}% |
 
 ---
