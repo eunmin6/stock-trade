@@ -24,9 +24,9 @@ def get_stock_code(stock_name):
 def analyze_technical(stock_code, stock_name):
     """기술적 분석 수행"""
 
-    # 1년치 데이터 수집
+    # 3년치 데이터 수집
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=365)
+    start_date = end_date - timedelta(days=1095)  # 3 years
 
     print(f"\n{'='*80}")
     print(f"[기술적 분석] {stock_name} ({stock_code})")

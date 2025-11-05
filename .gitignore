@@ -11,6 +11,9 @@ env/
 # Data files (개인 거래 데이터)
 data/
 
+# Temporary news data (백데이터, 통합 분석에만 사용)
+report/.temp-news/
+
 # IDE
 .vscode/
 .idea/

@@ -173,8 +173,8 @@ def get_report_path(keyword, date_str=None):
     if date_str is None:
         date_str = datetime.now().strftime('%Y-%m-%d')
 
-    # news 폴더 생성 (새 구조: report/news/)
-    report_dir = os.path.join('report', 'news')
+    # .temp-news 폴더 생성 (임시 백데이터 저장용)
+    report_dir = os.path.join('report', '.temp-news')
     os.makedirs(report_dir, exist_ok=True)
 
     # 파일명에서 사용할 수 없는 문자 제거
