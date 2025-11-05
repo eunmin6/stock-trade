@@ -318,9 +318,10 @@ def main():
 
     # 3. 마크다운 리포트 생성
     print("\n3. 마크다운 리포트 생성 중...")
-    output_dir = os.path.join('report', date_str)
+    # 새 구조: report/topgainers/날짜.md
+    output_dir = os.path.join('report', 'topgainers')
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, 'topgainers.md')
+    output_file = os.path.join(output_dir, f'{date_str}.md')
 
     generate_topgainers_md(stocks, trading_values, date_str, output_file)
 

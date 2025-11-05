@@ -173,13 +173,14 @@ def get_report_path(keyword, date_str=None):
     if date_str is None:
         date_str = datetime.now().strftime('%Y-%m-%d')
 
-    # news 폴더 생성
-    report_dir = os.path.join('report', date_str, 'news')
+    # news 폴더 생성 (새 구조: report/news/)
+    report_dir = os.path.join('report', 'news')
     os.makedirs(report_dir, exist_ok=True)
 
     # 파일명에서 사용할 수 없는 문자 제거
     safe_keyword = re.sub(r'[\\/*?:"<>|]', '', keyword)
-    return os.path.join(report_dir, f'news_{safe_keyword}.md')
+    # 새 형식: 종목명_날짜.md
+    return os.path.join(report_dir, f'{safe_keyword}_{date_str}.md')
 
 def crawl_google_news_rss(keyword, days=14):
     """Google News RSS를 통해 뉴스를 수집합니다."""

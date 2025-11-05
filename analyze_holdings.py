@@ -53,15 +53,20 @@ def get_report_path(date_str=None, file_type='png'):
     """날짜별 리포트 경로를 반환합니다."""
     if date_str is None:
         date_str = datetime.now().strftime('%Y-%m-%d')
-    report_dir = os.path.join('report', date_str)
-    os.makedirs(report_dir, exist_ok=True)
 
+    # 새 구조: report/holdings/ 또는 report/holdings/img/
     if file_type == 'png':
-        return os.path.join(report_dir, 'holdings.png')
+        report_dir = os.path.join('report', 'holdings', 'img')
+        os.makedirs(report_dir, exist_ok=True)
+        return os.path.join(report_dir, f'{date_str}.png')
     elif file_type == 'md':
-        return os.path.join(report_dir, 'holdings.md')
+        report_dir = os.path.join('report', 'holdings')
+        os.makedirs(report_dir, exist_ok=True)
+        return os.path.join(report_dir, f'{date_str}.md')
     else:
-        return os.path.join(report_dir, f'holdings.{file_type}')
+        report_dir = os.path.join('report', 'holdings')
+        os.makedirs(report_dir, exist_ok=True)
+        return os.path.join(report_dir, f'{date_str}.{file_type}')
 
 def load_holdings(date_str=None):
     """주식 보유 정보를 로드합니다."""
@@ -459,7 +464,8 @@ def generate_markdown_report(df, summary, date_str=None):
 
     # 시각화 이미지 링크
     md_content += "\n---\n\n## 📈 시각화 차트\n\n"
-    md_content += f"![Portfolio Analysis](holdings.png)\n\n"
+    # 새 구조에 맞게 이미지 경로 수정
+    md_content += f"![Portfolio Analysis](img/{date_str}.png)\n\n"
 
     md_content += "\n---\n\n"
     md_content += "*🤖 Generated with Claude Code*\n"
