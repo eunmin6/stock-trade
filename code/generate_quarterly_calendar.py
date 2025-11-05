@@ -1,0 +1,397 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+데이트레이딩 분기별 달력 생성 스크립트
+- 평일(월~금)만 표시
+- 만원 단위로 손익 표시
+- 수익/손실 색상 구분
+- Q1: 1-3월, Q2: 4-6월, Q3: 7-9월, Q4: 10-12월
+"""
+
+import os
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+import calendar
+
+def load_trading_results():
+    """tradings 폴더에서 모든 거래 결과를 로드합니다."""
+    report_dir = Path('report/tradings')
+    results = {}
+
+    # 모든 날짜별 md 파일 읽기
+    for md_file in report_dir.glob('????-??-??.md'):
+        date_str = md_file.stem
+
+        try:
+            with open(md_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # 거래 타입별 수익 현황에서 데이트레이딩 정보 추출
+            if '데이트레이딩' in content:
+                # "| 데이트레이딩 | 3건 | -573,883원 |" 형식 파싱
+                for line in content.split('\n'):
+                    if '데이트레이딩' in line and '|' in line:
+                        parts = [p.strip() for p in line.split('|')]
+                        if len(parts) >= 4 and parts[1] == '데이트레이딩':
+                            count_str = parts[2].replace('건', '').strip()
+                            profit_str = parts[3].replace('원', '').replace(',', '').strip()
+
+                            try:
+                                count = int(count_str)
+                                profit = int(profit_str)
+
+                                results[date_str] = {
+                                    'count': count,
+                                    'profit': profit
+                                }
+                            except ValueError:
+                                continue
+                            break
+        except Exception as e:
+            print(f"Warning: {md_file} 파일 읽기 실패: {e}")
+            continue
+
+    return results
+
+def generate_monthly_calendar(year, month, trading_results):
+    """월별 달력을 생성합니다 (평일만)."""
+    cal = calendar.monthcalendar(year, month)
+
+    # 달력 헤더
+    header = "| 월 | 화 | 수 | 목 | 금 |\n"
+    separator = "|:--:|:--:|:--:|:--:|:--:|\n"
+
+    rows = []
+    for week in cal:
+        row = []
+        # 월(0), 화(1), 수(2), 목(3), 금(4)만 표시 (토(5), 일(6) 제외)
+        for day_idx in range(5):  # 월~금만
+            day = week[day_idx]
+            if day == 0:
+                row.append(" ")
+            else:
+                date_str = f"{year:04d}-{month:02d}-{day:02d}"
+
+                if date_str in trading_results:
+                    result = trading_results[date_str]
+                    profit = result['profit']
+                    count = result['count']
+
+                    # 만원 단위로 표시
+                    profit_10k = profit / 10000
+
+                    # 수익/손실에 따라 이모지 선택
+                    # 빨간색(🔴): 수익
+                    # 파란색(🔵): 손실
+                    if profit > 0:
+                        emoji = "🔴"
+                        sign = "+"
+                    elif profit < 0:
+                        emoji = "🔵"
+                        sign = ""
+                    else:
+                        emoji = "⚪"
+                        sign = ""
+
+                    # 만원 단위로 표시 (소수점 1자리)
+                    cell = f"{day}<br/>{emoji}{sign}{profit_10k:.1f}만"
+                else:
+                    cell = f"{day}"
+
+                row.append(cell)
+
+        rows.append("| " + " | ".join(row) + " |")
+
+    return header + separator + "\n".join(rows)
+
+def calculate_quarterly_stats(year, quarter, trading_results):
+    """분기별 통계를 계산합니다."""
+    # 분기별 월 매핑
+    quarter_months = {
+        1: [1, 2, 3],
+        2: [4, 5, 6],
+        3: [7, 8, 9],
+        4: [10, 11, 12]
+    }
+
+    months = quarter_months[quarter]
+
+    total_profit = 0
+    total_count = 0
+    trading_days = 0
+    win_days = 0
+
+    for date_str, result in trading_results.items():
+        try:
+            date = datetime.strptime(date_str, '%Y-%m-%d')
+            if date.year == year and date.month in months:
+                trading_days += 1
+                total_profit += result['profit']
+                total_count += result['count']
+                if result['profit'] > 0:
+                    win_days += 1
+        except:
+            continue
+
+    avg_profit = total_profit / trading_days if trading_days > 0 else 0
+    win_rate = (win_days / trading_days * 100) if trading_days > 0 else 0
+
+    return {
+        'trading_days': trading_days,
+        'total_profit': total_profit,
+        'avg_profit': avg_profit,
+        'win_rate': win_rate,
+        'total_count': total_count,
+        'win_days': win_days,
+        'lose_days': trading_days - win_days
+    }
+
+def load_daily_trades(date_str):
+    """특정 날짜의 거래별 상세 내역을 로드합니다."""
+    md_file = Path(f'report/tradings/{date_str}.md')
+
+    if not md_file.exists():
+        return []
+
+    trades = []
+
+    try:
+        with open(md_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # "## 💰 거래별 손익 상세" 섹션 찾기
+        if '## 💰 거래별 손익 상세' in content:
+            lines = content.split('\n')
+            in_table = False
+
+            for line in lines:
+                if '## 💰 거래별 손익 상세' in line:
+                    in_table = True
+                    continue
+
+                if in_table:
+                    # 테이블 끝 확인
+                    if line.startswith('##') or line.startswith('---'):
+                        break
+
+                    # 데이터 행 파싱 (| 1 | 종목명 | 데이트레이딩 | 시총 | 거래대금 | ... |)
+                    if line.startswith('|') and '데이트레이딩' in line:
+                        parts = [p.strip() for p in line.split('|')]
+                        # 시총/거래대금 추가로 인해 컬럼이 9개로 증가
+                        if len(parts) >= 10:
+                            try:
+                                rank = parts[1]
+                                stock = parts[2]
+                                trade_type = parts[3]
+                                market_cap = parts[4]  # 시총
+                                trading_value = parts[5]  # 거래대금
+                                profit_str = parts[8].replace('원', '').replace(',', '').strip()
+                                return_str = parts[9].replace('%', '').strip()
+
+                                profit = int(profit_str)
+                                return_rate = float(return_str)
+
+                                trades.append({
+                                    'rank': rank,
+                                    'stock': stock,
+                                    'market_cap': market_cap,
+                                    'trading_value': trading_value,
+                                    'profit': profit,
+                                    'return_rate': return_rate
+                                })
+                            except:
+                                continue
+    except Exception as e:
+        print(f"Warning: {date_str} 거래 상세 로드 실패: {e}")
+
+    return trades
+
+def generate_monthly_details(year, quarter, trading_results):
+    """분기 내 월별 상세 내역을 생성합니다."""
+    # 분기별 월 매핑
+    quarter_months = {
+        1: [1, 2, 3],
+        2: [4, 5, 6],
+        3: [7, 8, 9],
+        4: [10, 11, 12]
+    }
+
+    months = quarter_months[quarter]
+    month_names = {1: '1월', 2: '2월', 3: '3월', 4: '4월', 5: '5월', 6: '6월',
+                   7: '7월', 8: '8월', 9: '9월', 10: '10월', 11: '11월', 12: '12월'}
+
+    details = []
+
+    for month in months:
+        # 해당 월의 날짜들 추출
+        sorted_dates = sorted([d for d in trading_results.keys()
+                              if d.startswith(f"{year:04d}-{month:02d}")])
+
+        if not sorted_dates:
+            continue
+
+        # 월별 헤더
+        details.append(f"### {month_names[month]}\n")
+
+        for date_str in sorted_dates:
+            result = trading_results[date_str]
+            date = datetime.strptime(date_str, '%Y-%m-%d')
+            weekday_kr = ['월', '화', '수', '목', '금', '토', '일'][date.weekday()]
+
+            profit = result['profit']
+            count = result['count']
+
+            # 수익/손실 표시
+            if profit > 0:
+                emoji = "🔴"
+                profit_sign = "+"
+            elif profit < 0:
+                emoji = "🔵"
+                profit_sign = ""
+            else:
+                emoji = "⚪"
+                profit_sign = ""
+
+            # 거래별 상세 로드
+            daily_trades = load_daily_trades(date_str)
+
+            # 거래 테이블 생성
+            trade_table = ""
+            if daily_trades:
+                trade_table = "\n| 순위 | 종목명 | 시총(억) | 거래대금(억) | 손익금액 | 수익률 |\n"
+                trade_table += "|:----:|--------|----------:|----------:|----------:|--------:|\n"
+
+                for trade in daily_trades:
+                    stock = trade['stock']
+                    market_cap = trade.get('market_cap', 'N/A')
+                    trading_value = trade.get('trading_value', 'N/A')
+                    trade_profit = trade['profit']
+                    return_rate = trade['return_rate']
+
+                    # 손익에 따라 파스텔 색상 적용
+                    if trade_profit > 100000:  # 10만원 이상 수익
+                        color_start = '<span style="background-color: #FFB3B3; padding: 2px 4px; border-radius: 3px;">'
+                        color_end = '</span>'
+                    elif trade_profit < -100000:  # 10만원 이상 손실
+                        color_start = '<span style="background-color: #B3D9FF; padding: 2px 4px; border-radius: 3px;">'
+                        color_end = '</span>'
+                    else:
+                        color_start = ''
+                        color_end = ''
+
+                    trade_sign = '+' if trade_profit > 0 else ''
+                    profit_display = f"{color_start}{trade_sign}{trade_profit:,}원{color_end}"
+
+                    # 수익률도 부호 추가
+                    return_sign = '+' if return_rate > 0 else ''
+                    return_display = f"{color_start}{return_sign}{return_rate:.2f}%{color_end}"
+
+                    trade_table += f"| {trade['rank']} | {stock} | {market_cap} | {trading_value} | {profit_display} | {return_display} |\n"
+
+            detail = f"""#### {date_str} ({weekday_kr}) {emoji}
+- 거래 건수: {count}건
+- 총 손익: {profit_sign}{profit:,}원 ({profit_sign}{profit/10000:.1f}만원)
+- [전체 리포트 보기](./{date_str}.md)
+{trade_table}
+"""
+            details.append(detail)
+
+    return "\n".join(details)
+
+def generate_report():
+    """데이트레이딩 분기별 리포트를 생성합니다."""
+    print("=" * 80)
+    print("데이트레이딩 분기별 달력 생성")
+    print("=" * 80)
+
+    # 거래 결과 로드
+    trading_results = load_trading_results()
+    print(f"\n총 {len(trading_results)}일의 데이트레이딩 데이터 로드 완료\n")
+
+    if not trading_results:
+        print("데이트레이딩 데이터가 없습니다.")
+        return
+
+    # 년도 및 분기 추출
+    year_quarters = set()
+    for date_str in trading_results.keys():
+        try:
+            date = datetime.strptime(date_str, '%Y-%m-%d')
+            quarter = (date.month - 1) // 3 + 1  # 1-3월=Q1, 4-6월=Q2, 7-9월=Q3, 10-12월=Q4
+            year_quarters.add((date.year, quarter))
+        except:
+            continue
+
+    # 분기별 리포트 생성
+    for year, quarter in sorted(year_quarters):
+        print(f"[{year}년 Q{quarter}] 달력 생성 중...")
+
+        # 분기 월 매핑
+        quarter_months = {
+            1: [1, 2, 3],
+            2: [4, 5, 6],
+            3: [7, 8, 9],
+            4: [10, 11, 12]
+        }
+        months = quarter_months[quarter]
+        month_names = ['1월', '2월', '3월', '4월', '5월', '6월',
+                      '7월', '8월', '9월', '10월', '11월', '12월']
+
+        # 각 월별 달력 생성
+        monthly_calendars = []
+        for month in months:
+            calendar_md = generate_monthly_calendar(year, month, trading_results)
+            monthly_calendars.append(f"### {month_names[month-1]}\n\n{calendar_md}")
+
+        # 분기별 통계
+        stats = calculate_quarterly_stats(year, quarter, trading_results)
+
+        # 월별 상세
+        monthly_details = generate_monthly_details(year, quarter, trading_results)
+
+        # 마크다운 생성
+        md_content = f"""# 데이트레이딩 분기별 성과
+
+## {year}년 Q{quarter} ({month_names[months[0]-1]}~{month_names[months[-1]-1]})
+
+{chr(10).join(monthly_calendars)}
+
+---
+
+## 📊 분기 통계
+
+| 항목 | 값 |
+|------|------|
+| 총 거래일수 | {stats['trading_days']}일 |
+| 총 거래 건수 | {stats['total_count']}건 |
+| 총 손익 | {stats['total_profit']:,}원 ({stats['total_profit']/10000:.1f}만원) |
+| 평균 손익 | {stats['avg_profit']:,.0f}원/일 ({stats['avg_profit']/10000:.1f}만원/일) |
+| 승률 | {stats['win_rate']:.1f}% ({stats['win_days']}승 {stats['lose_days']}패) |
+
+---
+
+## 📅 월별 상세
+
+{monthly_details}
+
+---
+
+*🤖 Generated with Claude Code*
+*Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+"""
+
+        # 파일 저장
+        output_file = f"report/tradings/데이트레이딩_{year:04d}-Q{quarter}.md"
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(md_content)
+
+        print(f"  → {output_file} 생성 완료")
+
+    print(f"\n{'='*80}")
+    print("데이트레이딩 분기별 달력 생성 완료!")
+    print(f"{'='*80}\n")
+
+if __name__ == "__main__":
+    generate_report()

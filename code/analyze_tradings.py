@@ -39,7 +39,8 @@ def get_data_path(date_str=None):
     """날짜별 데이터 경로를 반환합니다."""
     if date_str is None:
         date_str = datetime.now().strftime('%Y-%m-%d')
-    return os.path.join('data', date_str, 'tradings.xlsx')
+    # 새 구조: data/tradings/YYYY-MM-DD.xlsx
+    return os.path.join('data', 'tradings', f'{date_str}.xlsx')
 
 def get_report_path(date_str=None, file_type='png'):
     """날짜별 리포트 경로를 반환합니다."""
