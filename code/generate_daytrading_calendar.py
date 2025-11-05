@@ -82,11 +82,13 @@ def generate_monthly_calendar(year, month, trading_results):
                     profit_10k = profit / 10000
 
                     # 수익/손실에 따라 이모지 선택
+                    # 빨간색(🔴): 수익
+                    # 파란색(🔵): 손실
                     if profit > 0:
-                        emoji = "🟢"
+                        emoji = "🔴"
                         sign = "+"
                     elif profit < 0:
-                        emoji = "🔴"
+                        emoji = "🔵"
                         sign = ""
                     else:
                         emoji = "⚪"
@@ -206,11 +208,13 @@ def generate_daily_details(year, month, trading_results):
         count = result['count']
 
         # 수익/손실 표시
+        # 빨간색(🔴): 수익
+        # 파란색(🔵): 손실
         if profit > 0:
-            emoji = "🟢"
+            emoji = "🔴"
             profit_sign = "+"
         elif profit < 0:
-            emoji = "🔴"
+            emoji = "🔵"
             profit_sign = ""
         else:
             emoji = "⚪"
@@ -231,13 +235,13 @@ def generate_daily_details(year, month, trading_results):
                 return_rate = trade['return_rate']
 
                 # 손익에 따라 파스텔 색상 적용
-                # 큰 손실: 파스텔 블루 (#B3D9FF)
                 # 큰 수익: 파스텔 레드 (#FFB3B3)
-                if trade_profit < -100000:  # 10만원 이상 손실
-                    color_start = '<span style="background-color: #B3D9FF; padding: 2px 4px; border-radius: 3px;">'
-                    color_end = '</span>'
-                elif trade_profit > 100000:  # 10만원 이상 수익
+                # 큰 손실: 파스텔 블루 (#B3D9FF)
+                if trade_profit > 100000:  # 10만원 이상 수익
                     color_start = '<span style="background-color: #FFB3B3; padding: 2px 4px; border-radius: 3px;">'
+                    color_end = '</span>'
+                elif trade_profit < -100000:  # 10만원 이상 손실
+                    color_start = '<span style="background-color: #B3D9FF; padding: 2px 4px; border-radius: 3px;">'
                     color_end = '</span>'
                 else:
                     color_start = ''
