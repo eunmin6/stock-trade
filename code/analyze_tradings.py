@@ -65,20 +65,21 @@ def load_tradings(date_str=None):
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"데이터 파일을 찾을 수 없습니다: {file_path}")
 
-    df = pd.read_excel(file_path)
+    # 첫 2행이 헤더이므로 skiprows=2로 읽기
+    df = pd.read_excel(file_path, header=None, skiprows=2)
 
-    # 첫 번째 행(헤더 설명 행) 제거
-    df = df.iloc[1:].reset_index(drop=True)
-
-    # 컬럼명 정리
-    df.columns = ['종목코드', '종목명', '매수평균가', '매수수량', '매입금액',
-                  '매도평균가', '매도수량', '매도금액', '수수료및세금',
-                  '손익금액', '수익률', '대출일', '신용구분', '이전매입가']
+    # 컬럼명 정리 (금일매수/금일매도 구조 반영)
+    df.columns = ['종목코드', '종목명',
+                  '금일매수_평균가', '금일매수_수량', '금일매수_매입금액',
+                  '금일매도_평균가', '금일매도_수량', '금일매도_매도금액',
+                  '수수료및세금', '손익금액', '수익률',
+                  '대출일', '신용구분', '이전매입가']
 
     # 데이터 타입 변환
-    numeric_columns = ['종목코드', '매수평균가', '매수수량', '매입금액',
-                      '매도평균가', '매도수량', '매도금액', '수수료및세금',
-                      '손익금액', '수익률']
+    numeric_columns = ['종목코드',
+                      '금일매수_평균가', '금일매수_수량', '금일매수_매입금액',
+                      '금일매도_평균가', '금일매도_수량', '금일매도_매도금액',
+                      '수수료및세금', '손익금액', '수익률']
 
     for col in numeric_columns:
         df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -86,7 +87,28 @@ def load_tradings(date_str=None):
     # NaN 제거
     df = df.dropna(subset=['종목명'])
 
+    # 거래 타입 분류 추가
+    df['거래타입'] = df.apply(classify_trade_type, axis=1)
+
     return df
+
+def classify_trade_type(row):
+    """거래 유형을 분류합니다."""
+    buy_qty = row['금일매수_수량'] if pd.notna(row['금일매수_수량']) else 0
+    sell_qty = row['금일매도_수량'] if pd.notna(row['금일매도_수량']) else 0
+
+    if buy_qty == sell_qty and buy_qty > 0:
+        return '당일매수_당일매도'  # 데이트레이딩
+    elif buy_qty < sell_qty:
+        return '이전보유분_매도'  # 이전에 매수한 것을 오늘 매도
+    elif buy_qty > sell_qty and sell_qty > 0:
+        return '일부매도'
+    elif buy_qty > 0 and sell_qty == 0:
+        return '매수만'
+    elif sell_qty > 0 and buy_qty == 0:
+        return '매도만'
+    else:
+        return '기타'
 
 def group_tradings_by_name(df):
     """같은 종목을 하나로 묶어서 집계합니다. (신용/현금 구분 무시)"""
@@ -95,10 +117,10 @@ def group_tradings_by_name(df):
 
     grouped = df_copy.groupby('기본종목명').agg({
         '종목코드': 'first',
-        '매수수량': 'sum',
-        '매입금액': 'sum',
-        '매도수량': 'sum',
-        '매도금액': 'sum',
+        '금일매수_수량': 'sum',
+        '금일매수_매입금액': 'sum',
+        '금일매도_수량': 'sum',
+        '금일매도_매도금액': 'sum',
         '수수료및세금': 'sum',
         '손익금액': 'sum',
     }).reset_index()
@@ -106,11 +128,11 @@ def group_tradings_by_name(df):
     grouped.rename(columns={'기본종목명': '종목명'}, inplace=True)
 
     # 수익률 재계산
-    grouped['수익률'] = grouped['손익금액'] / grouped['매입금액']
+    grouped['수익률'] = grouped['손익금액'] / grouped['금일매수_매입금액']
 
     # 평균 매수가, 매도가 재계산
-    grouped['매수평균가'] = grouped['매입금액'] / grouped['매수수량']
-    grouped['매도평균가'] = grouped['매도금액'] / grouped['매도수량']
+    grouped['금일매수_평균가'] = grouped['금일매수_매입금액'] / grouped['금일매수_수량']
+    grouped['금일매도_평균가'] = grouped['금일매도_매도금액'] / grouped['금일매도_수량']
 
     # 신용거래 여부
     credit_stocks = df_copy[df_copy['신용구분'].notna()]['기본종목명'].unique()
@@ -127,9 +149,16 @@ def analyze_tradings(df):
     print(f"총 거래 건수: {len(df)}건")
     print("=" * 80)
 
+    # 거래 타입별 통계
+    print("\n[거래 타입별 분류]")
+    for trade_type in df['거래타입'].unique():
+        count = len(df[df['거래타입'] == trade_type])
+        profit = df[df['거래타입'] == trade_type]['손익금액'].sum()
+        print(f"{trade_type:20s}: {count:2d}건 | 손익: {profit:>12,.0f}원")
+
     # 전체 거래 현황
-    total_buy_amount = df['매입금액'].sum()
-    total_sell_amount = df['매도금액'].sum()
+    total_buy_amount = df['금일매수_매입금액'].sum()
+    total_sell_amount = df['금일매도_매도금액'].sum()
     total_profit = df['손익금액'].sum()
     total_return = (total_profit / total_buy_amount) * 100 if total_buy_amount > 0 else 0
 
@@ -149,20 +178,20 @@ def analyze_tradings(df):
 
     # 수익률 상위/하위
     print("\n[수익률 상위 5개 거래]")
-    top_5 = df.nlargest(5, '수익률')[['종목명', '손익금액', '수익률', '매입금액', '매도금액']]
+    top_5 = df.nlargest(5, '수익률')[['종목명', '손익금액', '수익률', '거래타입', '금일매수_매입금액', '금일매도_매도금액']]
     for idx, row in top_5.iterrows():
-        print(f"  {row['종목명']:15s} | 수익률: {row['수익률']*100:7.2f}% | 손익: {row['손익금액']:,.0f}원")
+        print(f"  {row['종목명']:15s} | {row['거래타입']:18s} | 수익률: {row['수익률']*100:7.2f}% | 손익: {row['손익금액']:,.0f}원")
 
     print("\n[수익률 하위 5개 거래]")
-    bottom_5 = df.nsmallest(5, '수익률')[['종목명', '손익금액', '수익률', '매입금액', '매도금액']]
+    bottom_5 = df.nsmallest(5, '수익률')[['종목명', '손익금액', '수익률', '거래타입', '금일매수_매입금액', '금일매도_매도금액']]
     for idx, row in bottom_5.iterrows():
-        print(f"  {row['종목명']:15s} | 수익률: {row['수익률']*100:7.2f}% | 손익: {row['손익금액']:,.0f}원")
+        print(f"  {row['종목명']:15s} | {row['거래타입']:18s} | 수익률: {row['수익률']*100:7.2f}% | 손익: {row['손익금액']:,.0f}원")
 
     # 거래별 상세 테이블
     print("\n[거래별 손익 상세]")
-    print("=" * 110)
-    print(f"{'순위':<4} {'종목명':<12} {'매입금액':>15} {'매도금액':>15} {'손익금액':>15} {'수익률':>10} {'수수료/세금':>12}")
-    print("=" * 110)
+    print("=" * 130)
+    print(f"{'순위':<4} {'종목명':<12} {'거래타입':<18} {'매입금액':>15} {'매도금액':>15} {'손익금액':>15} {'수익률':>10} {'수수료/세금':>12}")
+    print("=" * 130)
 
     df_sorted = df.sort_values('손익금액', ascending=True).reset_index(drop=True)
     for idx, row in df_sorted.iterrows():
@@ -170,10 +199,11 @@ def analyze_tradings(df):
         profit_loss_str = f"{row['손익금액']:,.0f}원"
         return_pct = f"{row['수익률']*100:+.2f}%"
         fee_str = f"{row['수수료및세금']:,.0f}원"
+        trade_type = row['거래타입']
 
-        print(f"{rank:<4} {row['종목명']:<12} {row['매입금액']:>14,.0f}원 {row['매도금액']:>14,.0f}원 {profit_loss_str:>15} {return_pct:>10} {fee_str:>12}")
+        print(f"{rank:<4} {row['종목명']:<12} {trade_type:<18} {row['금일매수_매입금액']:>14,.0f}원 {row['금일매도_매도금액']:>14,.0f}원 {profit_loss_str:>15} {return_pct:>10} {fee_str:>12}")
 
-    print("=" * 110)
+    print("=" * 130)
 
     # 신용거래 현황
     credit_trades = df[df['신용구분'] == '신용거래']
@@ -248,20 +278,26 @@ def visualize_tradings(df, summary, date_str=None):
     ax5 = plt.subplot(3, 3, 5)
     colors_scatter = ['#4CAF50' if x > 0 else '#F44336' for x in df['손익금액']]
     sizes = np.abs(df['수익률']) * 3000
-    ax5.scatter(df['매입금액'], df['매도금액'], c=colors_scatter, s=sizes, alpha=0.6)
 
-    max_val = max(df['매입금액'].max(), df['매도금액'].max())
-    ax5.plot([0, max_val], [0, max_val], 'k--', alpha=0.3, label='손익분기선')
+    # NaN 값 제외
+    df_plot = df.dropna(subset=['금일매수_매입금액', '금일매도_매도금액'])
+    if len(df_plot) > 0:
+        ax5.scatter(df_plot['금일매수_매입금액'], df_plot['금일매도_매도금액'],
+                   c=['#4CAF50' if x > 0 else '#F44336' for x in df_plot['손익금액']],
+                   s=[np.abs(x) * 3000 for x in df_plot['수익률']], alpha=0.6)
+
+        max_val = max(df_plot['금일매수_매입금액'].max(), df_plot['금일매도_매도금액'].max())
+        ax5.plot([0, max_val], [0, max_val], 'k--', alpha=0.3, label='손익분기선')
+
+        for idx, row in df_plot.iterrows():
+            ax5.annotate(row['종목명'], (row['금일매수_매입금액'], row['금일매도_매도금액']),
+                        fontsize=8, alpha=0.7)
 
     ax5.set_xlabel('매입금액 (원)')
     ax5.set_ylabel('매도금액 (원)')
     ax5.set_title('매입금액 vs 매도금액', fontsize=14, fontweight='bold')
     ax5.legend()
     ax5.grid(alpha=0.3)
-
-    for idx, row in df.iterrows():
-        ax5.annotate(row['종목명'], (row['매입금액'], row['매도금액']),
-                     fontsize=8, alpha=0.7)
 
     # 6. 거래 요약 통계
     ax6 = plt.subplot(3, 3, 6)
@@ -298,35 +334,36 @@ def visualize_tradings(df, summary, date_str=None):
     df_table = df.sort_values('손익금액', ascending=True).reset_index(drop=True)
 
     table_data = []
-    table_data.append(['순위', '종목명', '매입금액', '매도금액', '손익금액', '수익률'])
+    table_data.append(['순위', '종목명', '거래타입', '매입금액', '매도금액', '손익금액', '수익률'])
 
     for idx, row in df_table.iterrows():
         rank = idx + 1
         stock_name = row['종목명']
-        buy_amount = f"{row['매입금액']:,.0f}원"
-        sell_amount = f"{row['매도금액']:,.0f}원"
-        profit = f"{row['손익금액']:,.0f}원"
-        return_rate = f"{row['수익률']*100:+.2f}%"
+        trade_type = row['거래타입']
+        buy_amount = f"{row['금일매수_매입금액']:,.0f}원" if pd.notna(row['금일매수_매입금액']) else "N/A"
+        sell_amount = f"{row['금일매도_매도금액']:,.0f}원" if pd.notna(row['금일매도_매도금액']) else "N/A"
+        profit = f"{row['손익금액']:,.0f}원" if pd.notna(row['손익금액']) else "N/A"
+        return_rate = f"{row['수익률']*100:+.2f}%" if pd.notna(row['수익률']) else "N/A"
 
-        table_data.append([rank, stock_name, buy_amount, sell_amount, profit, return_rate])
+        table_data.append([rank, stock_name, trade_type, buy_amount, sell_amount, profit, return_rate])
 
     table = ax7.table(cellText=table_data, cellLoc='center', loc='center',
-                      colWidths=[0.08, 0.15, 0.20, 0.20, 0.20, 0.12])
+                      colWidths=[0.06, 0.12, 0.16, 0.16, 0.16, 0.16, 0.10])
 
     table.auto_set_font_size(False)
-    table.set_fontsize(11)
+    table.set_fontsize(10)
     table.scale(1, 2.5)
 
-    for i in range(6):
+    for i in range(7):
         cell = table[(0, i)]
         cell.set_facecolor('#4A90E2')
         cell.set_text_props(weight='bold', color='white')
 
     for i in range(1, len(table_data)):
         profit_value = df_table.iloc[i-1]['손익금액']
-        row_color = '#FFE5E5' if profit_value < 0 else '#E5F5E5'
+        row_color = '#FFE5E5' if pd.notna(profit_value) and profit_value < 0 else '#E5F5E5'
 
-        for j in range(6):
+        for j in range(7):
             cell = table[(i, j)]
             cell.set_facecolor(row_color)
 
@@ -342,6 +379,13 @@ def generate_markdown_report(df, summary, date_str=None):
     """마크다운 리포트를 생성합니다."""
     if date_str is None:
         date_str = datetime.now().strftime('%Y-%m-%d')
+
+    # 거래 타입별 통계
+    trade_type_stats = ""
+    for trade_type in df['거래타입'].unique():
+        count = len(df[df['거래타입'] == trade_type])
+        profit = df[df['거래타입'] == trade_type]['손익금액'].sum()
+        trade_type_stats += f"| {trade_type} | {count}건 | {profit:,.0f}원 |\n"
 
     md_content = f"""# 매도 거래 분석 리포트
 
@@ -362,6 +406,14 @@ def generate_markdown_report(df, summary, date_str=None):
 
 ---
 
+## 🔄 거래 타입별 분류
+
+| 거래 타입 | 건수 | 손익금액 |
+|-----------|------|----------|
+{trade_type_stats}
+
+---
+
 ## 📈 수익/손실 분류
 
 | 구분 | 거래 건수 | 금액 |
@@ -373,8 +425,8 @@ def generate_markdown_report(df, summary, date_str=None):
 
 ## 💰 거래별 손익 상세
 
-| 순위 | 종목명 | 매입금액 | 매도금액 | 손익금액 | 수익률 |
-|------|--------|----------|----------|----------|--------|
+| 순위 | 종목명 | 거래타입 | 매입금액 | 매도금액 | 손익금액 | 수익률 |
+|------|--------|----------|----------|----------|----------|--------|
 """
 
     df_sorted = df.sort_values('손익금액', ascending=True).reset_index(drop=True)
@@ -382,30 +434,31 @@ def generate_markdown_report(df, summary, date_str=None):
     for idx, row in df_sorted.iterrows():
         rank = idx + 1
         stock_name = row['종목명']
-        buy_amount = f"{row['매입금액']:,.0f}원"
-        sell_amount = f"{row['매도금액']:,.0f}원"
+        trade_type = row['거래타입']
+        buy_amount = f"{row['금일매수_매입금액']:,.0f}원"
+        sell_amount = f"{row['금일매도_매도금액']:,.0f}원"
         profit = f"{row['손익금액']:,.0f}원"
         return_rate = f"{row['수익률']*100:+.2f}%"
 
-        md_content += f"| {rank} | {stock_name} | {buy_amount} | {sell_amount} | {profit} | {return_rate} |\n"
+        md_content += f"| {rank} | {stock_name} | {trade_type} | {buy_amount} | {sell_amount} | {profit} | {return_rate} |\n"
 
     # 수익률 분석
     md_content += "\n---\n\n## 📊 수익률 분석\n\n"
     md_content += "### 🔝 수익률 상위 5개 거래\n\n"
-    md_content += "| 순위 | 종목명 | 수익률 | 손익금액 |\n"
-    md_content += "|------|--------|--------|----------|\n"
+    md_content += "| 순위 | 종목명 | 거래타입 | 수익률 | 손익금액 |\n"
+    md_content += "|------|--------|----------|--------|----------|\n"
 
     top_5 = df.nlargest(min(5, len(df)), '수익률')
     for idx, (_, row) in enumerate(top_5.iterrows(), 1):
-        md_content += f"| {idx} | {row['종목명']} | {row['수익률']*100:+.2f}% | {row['손익금액']:,.0f}원 |\n"
+        md_content += f"| {idx} | {row['종목명']} | {row['거래타입']} | {row['수익률']*100:+.2f}% | {row['손익금액']:,.0f}원 |\n"
 
     md_content += "\n### 📉 수익률 하위 5개 거래\n\n"
-    md_content += "| 순위 | 종목명 | 수익률 | 손익금액 |\n"
-    md_content += "|------|--------|--------|----------|\n"
+    md_content += "| 순위 | 종목명 | 거래타입 | 수익률 | 손익금액 |\n"
+    md_content += "|------|--------|----------|--------|----------|\n"
 
     bottom_5 = df.nsmallest(min(5, len(df)), '수익률')
     for idx, (_, row) in enumerate(bottom_5.iterrows(), 1):
-        md_content += f"| {idx} | {row['종목명']} | {row['수익률']*100:+.2f}% | {row['손익금액']:,.0f}원 |\n"
+        md_content += f"| {idx} | {row['종목명']} | {row['거래타입']} | {row['수익률']*100:+.2f}% | {row['손익금액']:,.0f}원 |\n"
 
     # 신용거래 내역
     credit_trades = df[df['신용구분'] == '신용거래']
@@ -452,9 +505,10 @@ def main():
         df = group_tradings_by_name(df_raw)
         print(f"그룹화 후: {len(df)}개 종목\n")
 
-        summary = analyze_tradings(df)
-        visualize_tradings(df, summary, date_str)
-        generate_markdown_report(df, summary, date_str)
+        # 분석과 리포트는 원본 데이터 사용 (거래타입 정보 포함)
+        summary = analyze_tradings(df_raw)
+        visualize_tradings(df_raw, summary, date_str)
+        generate_markdown_report(df_raw, summary, date_str)
 
     except FileNotFoundError as e:
         print(f"오류: {str(e)}")
