@@ -20,27 +20,32 @@
 
 ```
 stock-trade/
-├── analyze_holdings.py      # 보유 종목 분석 스크립트
-├── analyze_tradings.py      # 매도 거래 분석 스크립트
-├── analyze_news.py          # 뉴스 크롤링 및 분석 스크립트
-├── analyze_topgainers.py    # 급등종목 리포트 생성 스크립트
-├── analyze_stock_trend.py   # 개별 종목 1년 추세 분석 스크립트
-├── fetch_stock_prices.py    # 주가 조회 유틸리티
-├── requirements.txt          # 필요한 Python 패키지
-├── data/                     # 데이터 폴더 (gitignore)
+├── code/                           # 분석 스크립트
+│   ├── analyze_holdings.py         # 보유 종목 분석
+│   ├── analyze_tradings.py         # 매도 거래 분석
+│   ├── analyze_news_ultimate.py    # 뉴스 크롤링 및 감성 분석
+│   ├── analyze_topgainers.py       # 급등종목 리포트 생성
+│   └── analyze_stock_comprehensive.py  # 종합 주가 분석 (기술적 분석)
+├── data/                           # 데이터 폴더 (gitignore)
 │   └── YYYY-MM-DD/
-│       ├── holdings.xlsx     # 날짜별 보유 종목 데이터
-│       ├── tradings.xlsx     # 날짜별 매도 거래 데이터
-│       └── topgainers.html   # 급등종목 HTML (인포스탁)
-└── report/                   # 리포트 출력 폴더
-    └── YYYY-MM-DD/
-        ├── holdings.png      # 보유 종목 시각화 차트
-        ├── holdings.md       # 보유 종목 마크다운 리포트
-        ├── tradings.png      # 매도 거래 시각화 차트
-        ├── tradings.md       # 매도 거래 마크다운 리포트
-        ├── topgainers.md     # 급등종목 분석 리포트 (투자 추천 포함)
-        └── news/
-            └── news_종목명.md # 종목별 뉴스 분석 리포트
+│       ├── holdings.xlsx           # 날짜별 보유 종목 데이터
+│       ├── tradings.xlsx           # 날짜별 매도 거래 데이터
+│       └── topgainers.html         # 급등종목 HTML (인포스탁)
+├── report/                         # 리포트 출력 폴더
+│   ├── holdings/
+│   │   ├── YYYY-MM-DD.md          # 보유 종목 리포트
+│   │   └── img/YYYY-MM-DD.png     # 보유 종목 차트
+│   ├── tradings/
+│   │   ├── YYYY-MM-DD.md          # 매도 거래 리포트
+│   │   └── img/YYYY-MM-DD.png     # 매도 거래 차트
+│   ├── topgainers/
+│   │   └── YYYY-MM-DD.md          # 급등종목 분석 리포트
+│   ├── news/
+│   │   └── 종목명_YYYY-MM-DD.md   # 종목별 뉴스 분석
+│   └── analysis/
+│       └── 종목명_YYYY-MM-DD.md   # 종합 투자 분석 리포트
+├── requirements.txt               # 필요한 Python 패키지
+└── README.md                      # 프로젝트 설명서
 ```
 
 ## 🛠️ 설치 방법
@@ -74,15 +79,15 @@ pip install -r requirements.txt
 2. **분석 실행**:
 ```bash
 # 오늘 날짜 데이터 분석
-python analyze_holdings.py
+python code/analyze_holdings.py
 
 # 특정 날짜 데이터 분석
-python analyze_holdings.py 2025-11-03
+python code/analyze_holdings.py 2025-11-03
 ```
 
-3. **결과 확인**: `report/YYYY-MM-DD/` 폴더에서 결과 확인
-   - `holdings.png`: 시각화 차트
-   - `holdings.md`: 마크다운 리포트
+3. **결과 확인**: `report/holdings/` 폴더에서 결과 확인
+   - `YYYY-MM-DD.md`: 마크다운 리포트
+   - `img/YYYY-MM-DD.png`: 시각화 차트
 
 ### 2. 매도 거래 분석
 
@@ -91,15 +96,15 @@ python analyze_holdings.py 2025-11-03
 2. **분석 실행**:
 ```bash
 # 오늘 날짜 데이터 분석
-python analyze_tradings.py
+python code/analyze_tradings.py
 
 # 특정 날짜 데이터 분석
-python analyze_tradings.py 2025-11-03
+python code/analyze_tradings.py 2025-11-03
 ```
 
-3. **결과 확인**: `report/YYYY-MM-DD/` 폴더에서 결과 확인
-   - `tradings.png`: 시각화 차트
-   - `tradings.md`: 마크다운 리포트
+3. **결과 확인**: `report/tradings/` 폴더에서 결과 확인
+   - `YYYY-MM-DD.md`: 마크다운 리포트
+   - `img/YYYY-MM-DD.png`: 시각화 차트
 
 ### 3. 뉴스 분석
 
@@ -108,21 +113,18 @@ python analyze_tradings.py 2025-11-03
 1. **분석 실행**:
 ```bash
 # 종목명으로 뉴스 분석 (최근 14일)
-python analyze_news.py "삼성전자"
-python analyze_news.py "SK하이닉스"
-python analyze_news.py "두산로보틱스"
-
-# 실행 시 종목명 입력
-python analyze_news.py
+python code/analyze_news_ultimate.py "삼성전자"
+python code/analyze_news_ultimate.py "SK하이닉스"
+python code/analyze_news_ultimate.py "일동제약"
 ```
 
 2. **자동 분석 내용**:
-   - 네이버 뉴스 크롤링 (최근 14일)
+   - Google News RSS + Naver News 크롤링 (최근 14일)
    - 호재/악재/중립 자동 분류
    - 각 뉴스별 영향도(⭐) 자동 평가
    - 키워드 빈도 기반 중요도 산정
 
-3. **결과 확인**: `report/YYYY-MM-DD/news/news_종목명.md`
+3. **결과 확인**: `report/news/종목명_YYYY-MM-DD.md`
 
 #### 3-2. 뉴스 핵심 요약 추가 (Claude Code)
 
@@ -201,13 +203,13 @@ python analyze_news.py
 2. **분석 실행**:
 ```bash
 # 특정 날짜의 급등종목 분석
-python analyze_topgainers.py 2025-11-03
+python code/analyze_topgainers.py 2025-11-03
 
 # 가상환경 사용 시
-./venv/Scripts/python analyze_topgainers.py 2025-11-03
+./venv/Scripts/python code/analyze_topgainers.py 2025-11-03
 ```
 
-3. **결과 확인**: `report/YYYY-MM-DD/topgainers.md`
+3. **결과 확인**: `report/topgainers/YYYY-MM-DD.md`
    - 주요 급등 테마 분석 (키워드 기반 자동 분류)
    - 시장 분석 (평균 상승률, 최고 상승률)
    - 상한가 종목 테이블 (거래대금 500억원 이상)
@@ -219,11 +221,14 @@ python analyze_topgainers.py 2025-11-03
 
 **Claude Code 프롬프트 예시**:
 ```
-report/2025-11-03/topgainers.md 파일에 있는 급등 종목들을 하나씩 1년 자료를 분석해서,
-너무 고점인 것은 제외하고, 상승 전환 후 추가 상승이 충분히 가능하나
-너무 고점이라서 강한 매도세가 나올 종목은 배제하고
-종목 분석 및 추천 내용을 이 md 파일 맨 밑에 정리해줘.
+일동제약 종목 뉴스 분석과 기술적 분석 진행해줘.
 ```
+
+이 명령은 자동으로:
+1. 뉴스 수집 (`code/analyze_news_ultimate.py` 실행)
+2. 기술적 분석 (`code/analyze_stock_comprehensive.py` 실행)
+3. 종합 리포트 생성 (`report/analysis/종목명_YYYY-MM-DD.md`)
+4. GitHub 커밋
 
 **선정 기준**:
 
@@ -245,11 +250,11 @@ report/2025-11-03/topgainers.md 파일에 있는 급등 종목들을 하나씩 1
    - 조건 3: **데이터 부족** (상장 첫날 등)
    - 사유: 변동성만 높고 방향성 불명확, 또는 장기 하락세
 
-**분석 도구**: `analyze_stock_trend.py`
+**분석 도구**: `code/analyze_stock_comprehensive.py`
 ```bash
-# 개별 종목 추세 분석
-python analyze_stock_trend.py 필옵틱스
-python analyze_stock_trend.py 161580  # 종목코드로도 가능
+# 개별 종목 종합 분석
+python code/analyze_stock_comprehensive.py "일동제약"
+python code/analyze_stock_comprehensive.py "249420"  # 종목코드로도 가능
 ```
 
 **출력 정보**:
