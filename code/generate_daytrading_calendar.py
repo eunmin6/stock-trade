@@ -135,6 +135,61 @@ def calculate_monthly_stats(year, month, trading_results):
         'lose_days': trading_days - win_days
     }
 
+def load_daily_trades(date_str):
+    """특정 날짜의 거래별 상세 내역을 로드합니다."""
+    md_file = Path(f'report/tradings/{date_str}.md')
+
+    if not md_file.exists():
+        return []
+
+    trades = []
+
+    try:
+        with open(md_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # "## 💰 거래별 손익 상세" 섹션 찾기
+        if '## 💰 거래별 손익 상세' in content:
+            lines = content.split('\n')
+            in_table = False
+
+            for line in lines:
+                if '## 💰 거래별 손익 상세' in line:
+                    in_table = True
+                    continue
+
+                if in_table:
+                    # 테이블 끝 확인
+                    if line.startswith('##') or line.startswith('---'):
+                        break
+
+                    # 데이터 행 파싱 (| 1 | 종목명 | 데이트레이딩 | ... |)
+                    if line.startswith('|') and '데이트레이딩' in line:
+                        parts = [p.strip() for p in line.split('|')]
+                        if len(parts) >= 7:
+                            try:
+                                rank = parts[1]
+                                stock = parts[2]
+                                trade_type = parts[3]
+                                profit_str = parts[6].replace('원', '').replace(',', '').strip()
+                                return_str = parts[7].replace('%', '').strip()
+
+                                profit = int(profit_str)
+                                return_rate = float(return_str)
+
+                                trades.append({
+                                    'rank': rank,
+                                    'stock': stock,
+                                    'profit': profit,
+                                    'return_rate': return_rate
+                                })
+                            except:
+                                continue
+    except Exception as e:
+        print(f"Warning: {date_str} 거래 상세 로드 실패: {e}")
+
+    return trades
+
 def generate_daily_details(year, month, trading_results):
     """일별 상세 내역을 생성합니다."""
     details = []
@@ -153,18 +208,55 @@ def generate_daily_details(year, month, trading_results):
         # 수익/손실 표시
         if profit > 0:
             emoji = "🟢"
-            sign = "+"
+            profit_sign = "+"
         elif profit < 0:
             emoji = "🔴"
-            sign = ""
+            profit_sign = ""
         else:
             emoji = "⚪"
-            sign = ""
+            profit_sign = ""
+
+        # 거래별 상세 로드
+        daily_trades = load_daily_trades(date_str)
+
+        # 거래 테이블 생성
+        trade_table = ""
+        if daily_trades:
+            trade_table = "\n| 순위 | 종목명 | 손익금액 | 수익률 |\n"
+            trade_table += "|:----:|--------|----------:|--------:|\n"
+
+            for trade in daily_trades:
+                stock = trade['stock']
+                trade_profit = trade['profit']
+                return_rate = trade['return_rate']
+
+                # 손익에 따라 파스텔 색상 적용
+                # 큰 손실: 파스텔 블루 (#B3D9FF)
+                # 큰 수익: 파스텔 레드 (#FFB3B3)
+                if trade_profit < -100000:  # 10만원 이상 손실
+                    color_start = '<span style="background-color: #B3D9FF; padding: 2px 4px; border-radius: 3px;">'
+                    color_end = '</span>'
+                elif trade_profit > 100000:  # 10만원 이상 수익
+                    color_start = '<span style="background-color: #FFB3B3; padding: 2px 4px; border-radius: 3px;">'
+                    color_end = '</span>'
+                else:
+                    color_start = ''
+                    color_end = ''
+
+                trade_sign = '+' if trade_profit > 0 else ''
+                profit_display = f"{color_start}{trade_sign}{trade_profit:,}원{color_end}"
+
+                # 수익률도 부호 추가
+                return_sign = '+' if return_rate > 0 else ''
+                return_display = f"{color_start}{return_sign}{return_rate:.2f}%{color_end}"
+
+                trade_table += f"| {trade['rank']} | {stock} | {profit_display} | {return_display} |\n"
 
         detail = f"""#### {date_str} ({weekday_kr}) {emoji}
 - 거래 건수: {count}건
-- 손익: {sign}{profit:,}원 ({sign}{profit/10000:.1f}만원)
-- [상세 보기](./{date_str}.md)
+- 총 손익: {profit_sign}{profit:,}원 ({profit_sign}{profit/10000:.1f}만원)
+- [전체 리포트 보기](./{date_str}.md)
+{trade_table}
 """
         details.append(detail)
 
